@@ -17,7 +17,7 @@ import datetime
 
 import pymongo
 import pandas as pd
-
+import os
 
 options = Options()
 # options.add_argument("--headless")
@@ -38,6 +38,9 @@ class colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
+def clearConsole():
+    command = 'clear'
+    os.system(command)
 
 def log(message, color=colors.HEADER, showTimestamp=True):
     d = datetime.datetime.now()
@@ -60,21 +63,39 @@ class DB:
         else:
             self.document.insert_one(item)
             log("New Scanner Object created.")
+    def updateListeners(self, data):
+        activeDoc = self.load()
+        oldListeners = activeDoc['listeners']        
+        self.document.update_one({"email": activeDoc['email']}, {"$set": {"listeners": data}})
+        print_log = "Updated listeners: {} -> {}".format(oldListeners, data)
+        log("Updated Listener")
+    def updateAlerts(self, data):
+        activeDoc = self.load()
+        oldAlert = activeDoc['alerts']        
+        self.document.update_one({"email": activeDoc['email']}, {"$set": {"alerts": data}})
+        print_log = "Updated listeners: {} -> {}".format(oldAlert, data)
+        log(print_log)
     def load(self):
         return self.document.find_one()
     def setNumber(self, number):
         parseNumbers = number.split('@')
         activeDoc = self.load()
         self.document.update_one({"email": activeDoc['email']}, {"$set": { "number": parseNumbers[0], "carrier": parseNumbers[1]}})
-        
         log('Number and Carrier updated')
     def addListener(self, listener):
         activeDoc = self.load()
         updatedDoc = self.document.update_one({"email": activeDoc['email']}, {"$push": {"listeners":listener}})
         log("Created a new Listener.")
+    def addAlert(self, alert):
+        activeDoc = self.load()
+        self.document.update_one({"email": activeDoc['email']}, {"$push": {"alerts": alert}})
+        log("Created a new Alert.")
     def getAllListeners(self):
         activeDoc = self.load()
         return activeDoc['listeners']
+    def getAllAlerts(self):
+        activeDoc = self.load()
+        return activeDoc['alerts']
     def deleteAll(self):
         count = self.document.delete_many({})
         log_info = '{} documents deleted.'.format(count.deleted_count)
@@ -213,7 +234,6 @@ class Menu:
             log(option_print, color=colors.OKCYAN, showTimestamp=False)
         log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
     def listener_menu(self, db):
-        
         option = -1
         while(option != 0):
             listenerSize = len(db.getAllListeners())
@@ -231,32 +251,133 @@ class Menu:
             log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
 
             option = int(input('choose an item: '))
-
-
             if (option == 1):
+                clearConsole()
                 listeners = db.getAllListeners()
                 dfListeners = pd.DataFrame(listeners)
-                print(dfListeners)
+                log(dfListeners, showTimestamp=False)
             elif (option == 2):
+                clearConsole()
                 log("In order to activate a listener you will need the URL of the website you would like me to watch as well as the CSS class name of the item you'd like me to monitor for change. Example:", color=colors.HEADER, showTimestamp=False)
                 log("url: https://www.bestbuy.com/site/microsoft-xbox-series-x-1tb-console-black/6428324.p?skuId=6428324, class-name: 'add-to-cart-button'", color=colors.BOLD, showTimestamp=False)
+                listenerName = input("Listener Name: ")
                 company = input("Company: ")
                 url = input("URL: ")
                 className = input("Class-Name: ")
                 listener = {
+                    "name": listenerName,
                     "company": company,
                     "url": url,
                     "className": className,
                 }
                 db.addListener(listener)
             elif(option == 3):
+                clearConsole()
                 listeners = db.getAllListeners()
                 count = 1
+                menu_options = {}
                 for listener in listeners:
                     option_print = '{} -- {}'.format(count, listener)
                     log(option_print, color=colors.BOLD, showTimestamp=False)
                     count = count + 1
-        
+                option = int(input('choose a listener to update: '))
+                listenerToUpdate = listeners[option -1]
+
+                count = 1
+                keys = listenerToUpdate.keys()
+
+                log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+                for key in keys:
+                    listeners[option-1][key] = input("{} = {} -> (Hit Enter to leave default, or enter a value) : ".format(key, listenerToUpdate[key])) or listenerToUpdate[key]
+                 
+                log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+                db.updateListeners(listeners)
+            elif(option == 4):
+                clearConsole()
+                listeners = db.getAllListeners()
+                count = 1
+                menu_options = {}
+                for listener in listeners:
+                    option_print = '{} -- {}'.format(count, listener)
+                    log(option_print, color=colors.BOLD, showTimestamp=False)
+                    count = count + 1
+                option = int(input('choose a listener to delete: '))
+                listeners.pop(option-1)
+                db.updateListeners(listeners)
+    def alerts_menu(self, db):
+        option = -1
+        allListeners = db.getAllListeners()
+        while(option != 0):
+            alertsSize = len(db.getAllAlerts())
+            menu_options = {
+                1: 'View Active Alert ({} active alerts)'.format(alertsSize),
+                2: 'Set Alert',
+                3: 'Update Alert',
+                4: 'Delete Alert',
+                0: 'Main Menue'
+            }
+            log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+            for key in menu_options.keys():
+                option_print = '{} -- {}'.format(key, menu_options[key])
+                log(option_print, color=colors.OKCYAN, showTimestamp=False)
+            log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+
+            option = int(input('choose an item: '))
+            if (option == 1):
+                clearConsole()
+                alerts = db.getAllAlerts()
+                dfListeners = pd.DataFrame(alerts)
+                log(dfListeners, showTimestamp=False)
+            elif(option == 2):
+                clearConsole()
+                log('setting alert', showTimestamp=False)
+                timeScale = input("At what interval would you like to scan? (day, hour, min, sec): ")
+                frequency = int(input("How often would you like to scan? (1, 5, 60, 100): "))
+                count = 1
+                log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+                for listener in allListeners:
+                    option_print = '{} -- {}'.format(count, listener["name"])
+                    log(option_print, color=colors.OKCYAN, showTimestamp=False)
+                log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+                option = int(input("Which company do you want to attach the listener to? "))
+                db.addAlert({"timeScale": timeScale, "frequency": frequency, "listener":allListeners[option -1]["name"]})
+            elif(option == 3):
+                clearConsole()
+                alerts = db.getAllAlerts()
+                count = 1
+                menu_options = {}
+                for alert in alerts:
+                    option_print = '{} -- {}'.format(count, alert)
+                    log(option_print, color=colors.BOLD, showTimestamp=False)
+                    count = count + 1
+                option = int(input('choose an alert to update: '))
+                alertToUpdate = alerts[option -1]
+
+                count = 1
+                keys = alertToUpdate.keys()
+
+                log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+                for key in keys:
+                    alerts[option-1][key] = input("{} = {} -> (Hit Enter to leave default, or enter a value) : ".format(key, alertToUpdate[key])) or alertToUpdate[key]
+                 
+                log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+                db.updateAlerts(alerts)
+            elif( option == 4):
+                clearConsole()
+                alerts = db.getAllAlerts()
+                count = 1
+                menu_options = {}
+                for alert in alerts:
+                    option_print = '{} -- {}'.format(count, alert)
+                    log(option_print, color=colors.BOLD, showTimestamp=False)
+                    count = count + 1
+                option = int(input('choose an alert to delete: '))
+                if(len(alerts) > 1):
+                    alert.pop(option-1)
+                    db.updateAlerts(alert)
+
+                else:
+                    db.updateAlerts([])
 
 if __name__ == "__main__":
     db = DB()
@@ -266,14 +387,20 @@ if __name__ == "__main__":
     while(True):
         if (user):
             while(True):
+                clearConsole()
                 menu.main_menu()
                 option = int(input('What would you like to do: '))
                 if (option == 1):
+                    clearConsole()
                     menu.listener_menu(db)
+                elif (option == 2):
+                    clearConsole()
+                    menu.alerts_menu(db)
                 elif (option == 99):
                     db.deleteAll()
                     exit()
                 elif (option == 0):
+                    clearConsole()
                     log("Good scalping! See you next time.", showTimestamp=False)
                     exit()
         else:
@@ -283,7 +410,7 @@ if __name__ == "__main__":
             password = input("What is your email password?  ->  ")
             number = input("Enter the phone number followed by the @ symbol and phone carrier you'd like to receive alerts on: (IE. 505123456@verizon)")
             if (email and password and number):
-                db.update({"email":email, "password": password, "number": "", "carrier": "", "listeners": []})
+                db.update({"email":email, "password": password, "number": "", "carrier": "", "listeners": [], "alerts": []})
                 db.setNumber(number)
                 user = db.load()
 
