@@ -11,13 +11,13 @@ class Menu:
     def main_menu(self):
         allListeners = self.db.get("listeners")
         allAlerts = self.db.get("alerts")
-
+        allScanners = self.db.get("scanners")
         menu_options = {
             1: 'Listeners ({} active)'.format(len(allListeners)),
             2: 'Alerts ({}) active'.format(len(allAlerts)),
         }
         if (len(allListeners) > 0 and len(allAlerts) > 0):
-            menu_options[3] = 'Scanner' 
+            menu_options[3] = 'Scanner ({} available)'.format(len(allScanners)) 
         
         menu_options[0] = 'Exit'
         menu_options[99] =  'Delete Data'
@@ -130,6 +130,7 @@ class Menu:
                 for listener in allListeners:
                     option_print = '{} -- {}'.format(count, listener["name"])
                     self.log(option_print, color=self.colors.OKCYAN, showTimestamp=False)
+                    count = count + 1
                 self.log("----------------------------",color=self.colors.OKCYAN, showTimestamp=False)
                 option = int(input("Which company do you want to attach the listener to? "))
                 self.db.addAlert({"timeScale": timeScale, "frequency": frequency, "listener":allListeners[option -1]["name"]})
@@ -174,7 +175,7 @@ class Menu:
             allScanners = self.db.get('scanners')
             listeners = self.db.get("listeners")
             menu_options = {
-                1: 'View All Scanners',
+                1: 'View All Scanners ({} availalbe)'.format(len(allScanners)),
                 2: 'Start Scanner',
                 3: 'Edit Scanner',
                 4: 'Delete Scanner',
@@ -198,6 +199,7 @@ class Menu:
                 for listener in listeners:
                     option_print = '{} -- {}'.format(count, listener['name'])
                     self.log(option_print, color=self.colors.OKCYAN, showTimestamp=False)
+                    count = count + 1
                 self.log("----------------------------",color=self.colors.OKCYAN, showTimestamp=False)
                 option = int(input('Which Scanner would you like to start? '))
                 activeScanner = listeners[option -1]
