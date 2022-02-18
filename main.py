@@ -2,6 +2,7 @@ from email import message
 # from typing import Match
 # from requests.api import head
 from selenium import webdriver
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options  
@@ -77,10 +78,10 @@ class DB:
         log(print_log)
     def load(self):
         return self.document.find_one()
-    def setNumber(self, number):
+    def addNumber(self, number):
         parseNumbers = number.split('@')
         activeDoc = self.load()
-        self.document.update_one({"email": activeDoc['email']}, {"$set": { "number": parseNumbers[0], "carrier": parseNumbers[1]}})
+        self.document.update_one({"email": activeDoc['email']}, {"$push": {"numbers": { "number": parseNumbers[0], "carrier": parseNumbers[1]}}})
         log('Number and Carrier updated')
     def addListener(self, listener):
         activeDoc = self.load()
@@ -90,20 +91,24 @@ class DB:
         activeDoc = self.load()
         self.document.update_one({"email": activeDoc['email']}, {"$push": {"alerts": alert}})
         log("Created a new Alert.")
+    def getAll(self, item):
+        activeDoc = self.load()
+        return activeDoc[item]
     def getAllListeners(self):
         activeDoc = self.load()
         return activeDoc['listeners']
     def getAllAlerts(self):
         activeDoc = self.load()
         return activeDoc['alerts']
+    
     def deleteAll(self):
         count = self.document.delete_many({})
         log_info = '{} documents deleted.'.format(count.deleted_count)
         log(log_info ,color=colors.FAIL, showTimestamp=False)
 class Crawl:
-    def __init__(self, url, className, store, recipients):
+    def __init__(self, db, url, className, store, recipients):
         log("Initializing Crawler for (%s)" % (store))
-
+        self.db = db
         self.url = url
         self.className = className
         self.store = store
@@ -122,9 +127,8 @@ class Crawl:
 
     def scanner(self):
         log("Starting Scanner Thread")
-        
         self.updated = datetime.datetime.now()
-        self.driver = webdriver.Chrome('./chromedriver', options=options)
+        self.driver = webdriver.Chrome(ChromeDriverManager().install())
         self.driver.get(self.url)
         element = self.driver.find_element(By.CLASS_NAME, self.className)
         if (element):
@@ -147,11 +151,11 @@ class Crawl:
         \n-- Status: %s
         \n-- %s \n
         """ % (data["Store"], data["Updated"], data["Status"], data["Message"])
-        email = Email(self.recipients)
+        programEmail = db.getAll('email')
+        programPassword = db.getAll('password')
+        email = Email(programEmail, programPassword, self.recipients)
         email.send(message)
-
-        
-    
+ 
     def getStatus(self):
         return self.status
 
@@ -168,13 +172,12 @@ class Crawl:
         return self.output
 
 class Email:
-   def __init__(self, recipients):
+   def __init__(self, email, password, recipients):
        log("Initializing SMS Connection")
        self.recipients = recipients
-       self.email = "dev.joe.chacon@gmail.com"
-       self.password = "Jmm12373618.."
-    #    self.sms_gateway = "5057107534@mms.att.net"
-       self.sms_gateways =  self.getGateways() #["5057107534@mms.att.net", "5056815786@vtext.com"]
+       self.email = email
+       self.password = password
+       self.sms_gateways =  self.getGateways()
        self.smtp = "smtp.gmail.com"
        self.port = 587
         
@@ -222,12 +225,19 @@ class Email:
 class Menu:
         
     def main_menu(self):
+        allListeners = db.getAllListeners()
+        allAlerts = db.getAllAlerts()
+
         menu_options = {
-            1: 'Listeners',
-            2: 'Alerts',
-            0: 'Exit',
-            99: 'Delete Data'
+            1: 'Listeners ({} active)'.format(len(allListeners)),
+            2: 'Alerts ({}) active'.format(len(allAlerts)),
         }
+        if (len(allListeners) > 0 and len(allAlerts) > 0):
+            menu_options[3] = 'Scanner' 
+        
+        menu_options[0] = 'Exit'
+        menu_options[99] =  'Delete Data'
+
         log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
         for key in menu_options.keys():
             option_print = '{} -- {}'.format(key, menu_options[key])
@@ -236,7 +246,7 @@ class Menu:
     def listener_menu(self, db):
         option = -1
         while(option != 0):
-            listenerSize = len(db.getAllListeners())
+            listenerSize = len(db.getAll('listeners'))
             menu_options = {
                 1: 'View All Listeners ({} active listeners)'.format(listenerSize),
                 2: 'Add New Listener',
@@ -306,9 +316,9 @@ class Menu:
                 db.updateListeners(listeners)
     def alerts_menu(self, db):
         option = -1
-        allListeners = db.getAllListeners()
+        allListeners = db.getAll('listeners') #db.getAllListeners()
         while(option != 0):
-            alertsSize = len(db.getAllAlerts())
+            alertsSize = len(db.getAll('alerts'))
             menu_options = {
                 1: 'View Active Alert ({} active alerts)'.format(alertsSize),
                 2: 'Set Alert',
@@ -378,7 +388,45 @@ class Menu:
 
                 else:
                     db.updateAlerts([])
+    def scanners_menu(self, db):
+        option = -1
+        while(option != 0):
+            allScanners = db.getAll('scanners')
+            menu_options = {
+                1: 'View All Scanners',
+                2: 'Start Scanner',
+                3: 'Edit Scanner',
+                4: 'Delete Scanner',
+                0: 'Main Menu'
+            }
+            log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+            for key in menu_options.keys():
+                option_print = '{} -- {}'.format(key, menu_options[key])
+                log(option_print, color=colors.OKCYAN, showTimestamp=False)
+            log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
 
+            option = int(input('choose an item: '))
+            if (option == 1):
+                clearConsole()
+                dfScanners = pd.DataFrame(allScanners)
+                log(dfScanners, showTimestamp=False)
+            elif (option == 2):
+                clearConsole()
+                listeners = db.getAll('listeners')
+                count = 1
+                log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+                for listener in listeners:
+                    option_print = '{} -- {}'.format(count, listener['name'])
+                    log(option_print, color=colors.OKCYAN, showTimestamp=False)
+                log("----------------------------",color=colors.OKCYAN, showTimestamp=False)
+                option = int(input('Which Scanner would you like to start? '))
+                activeScanner = listeners[option -1]
+                activeScanner['active'] = True
+                activeScanner['runtime'] = datetime.datetime.now()
+                print(activeScanner)
+                numbers = db.getAll('numbers')
+                crawler = Crawl(db, activeScanner['url'], activeScanner['className'], activeScanner['name'], numbers)
+                crawler.scan()
 if __name__ == "__main__":
     db = DB()
     # db.deleteAll()
@@ -396,6 +444,9 @@ if __name__ == "__main__":
                 elif (option == 2):
                     clearConsole()
                     menu.alerts_menu(db)
+                elif (option == 3):
+                    clearConsole()
+                    menu.scanners_menu(db)
                 elif (option == 99):
                     db.deleteAll()
                     exit()
@@ -410,8 +461,8 @@ if __name__ == "__main__":
             password = input("What is your email password?  ->  ")
             number = input("Enter the phone number followed by the @ symbol and phone carrier you'd like to receive alerts on: (IE. 505123456@verizon)")
             if (email and password and number):
-                db.update({"email":email, "password": password, "number": "", "carrier": "", "listeners": [], "alerts": []})
-                db.setNumber(number)
+                db.update({"email":email, "password": password, "numbers": [], "carrier": "", "listeners": [], "alerts": [], "scanners":[]})
+                db.addNumber(number)
                 user = db.load()
 
             
