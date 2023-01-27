@@ -69,15 +69,15 @@ if __name__ == "__main__":
 
     # sms_recipients = [
     #     {
-    #         "number": "5056815786",
+    #         "number": "",
     #         "carrier": "verizon"
     #     }, 
     #     # {
-    #     #     "number": "5057150015",
+    #     #     "number": "",
     #     #     "carrier": "att"
     #     # }, 
     #     # {
-    #     #     "number": "5057107534",
+    #     #     "number": "",
     #     #     "carrier": "att"
     #     # }
     # ]
