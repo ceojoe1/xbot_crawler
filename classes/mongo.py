@@ -5,7 +5,7 @@ class Mongo:
     def __init__(self, log, colors):
         self.log = log
         self.colors = colors
-        self.client = pymongo.MongoClient('mongodb://root:toor@localhost:27017')
+        self.client = pymongo.MongoClient('mongodb://MY_MONGO_INSTANCE')
         self.db = self.client['scanner']
         self.document = self.db['user']
 
